@@ -55,7 +55,3 @@ This project is licensed under the MIT License. This license allows for free use
 ### Support and Contact
 
 For support or to report issues, please raise an issue on the GitHub repository or contact Stephan Yazvinski at [syazvinski@gmail.com](mailto:syazvinski@gmail.com).
-
----
-
-*Note: This README is a template. Adjust the content as necessary to suit the specifics of your project.*
