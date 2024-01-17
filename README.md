@@ -1,7 +1,3 @@
-### README.md for Grade Calculation Browser Extension
-
----
-
 ## Grade Calculation Browser Extension
 
 Developed by Stephan Yazvinski, this extension is designed to enhance your browsing experience by injecting a grade calculation script into web pages, efficiently calculating and displaying letter grades based on percentage scores and predefined academic levels.
