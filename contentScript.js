@@ -1,69 +1,98 @@
-// contentscript.js
 console.log('Grade calculation script is injected and running!');
 
 // Selector for the tooltip content
 const tooltipGutsSelector = '.AsTooltip-guts.js-AsTooltip-guts';
 
-// Utility function to get letter grade based on percentage and level
-function getLetterGrade(percentage, level) {
-  // Round the percentage to handle edge cases like 48.2% which should be rounded down to 48%
-  const roundedPercentage = Math.round(percentage);
+// Grading rubric
+const gradingRubric = {
+  'AD': [
+    { min_percent: 71, max_percent: 100, letter_grade: 'A+', next_grade: 'Max' },
+    { min_percent: 0, max_percent: 70, letter_grade: 'A', next_grade: 'A+' },
+  ],
+  'PR': [
+    { min_percent: 36, max_percent: 100, letter_grade: 'A', next_grade: 'A+' },
+    { min_percent: 0, max_percent: 35, letter_grade: 'B+', next_grade: 'A' }
+  ],
+  'EM': [
+    { min_percent: 67, max_percent: 100, letter_grade: 'B', next_grade: 'B+' },
+    { min_percent: 34, max_percent: 66, letter_grade: 'C+', next_grade: 'B' },
+    { min_percent: 0, max_percent: 33, letter_grade: 'C', next_grade: 'C+' }
+  ],
+  'NV': [
+    { min_percent: 0, max_percent: 99, letter_grade: 'F', next_grade: 'C' }
+  ]
+};
 
-  const gradeRubric = {
-    'AD': [
-      { min: 71, grade: 'A+' }
-    ],
-    'PR': [
-      { min: 36, grade: 'A' },
-      { min: 0, grade: 'B+' }
-    ],
-    'EM': [
-      { min: 67, grade: 'B' },
-      { min: 34, grade: 'C+' },
-      { min: 0, grade: 'C' }
-    ],
-    'NV': { min: 0, grade: 'F' }
-  };
+// Determines the letter grade and the percentage needed for the next grade
+function determineLetterGradeAndNext(status, percentage) {
+  let currentGrade = undefined;
+  let nextGrade = undefined;
+  let percentForNextGrade = 0;
 
-  // Determine the correct rubric to use based on the level and percentage
-  let correctRubric;
-  if (level === 'AD' && roundedPercentage < 71) {
-    // If the level is 'AD' but the percentage is below 71, it should be treated as 'PR'
-    correctRubric = gradeRubric['PR'];
+  if (status in gradingRubric) {
+    for (let gradeInfo of gradingRubric[status]) {
+      if (gradeInfo.min_percent <= percentage && percentage <= gradeInfo.max_percent) {
+        currentGrade = gradeInfo.letter_grade;
+        nextGrade = gradeInfo.next_grade;
+        if (nextGrade !== 'Max') {
+          // If the next grade is within the current status, calculate the difference to its minimum percent
+          percentForNextGrade = gradeInfo.max_percent + 1 - percentage;
+        }
+        break;
+      }
+    }
   } else {
-    correctRubric = gradeRubric[level];
+    throw new Error("Invalid status code");
   }
 
-  // Check the level and find the corresponding letter grade
-  if (Array.isArray(correctRubric)) {
-    // Find the entry for which the rounded percentage is greater or equal to the min value
-    const entry = correctRubric.find(entry => roundedPercentage >= entry.min);
-    return entry ? entry.grade : 'Grade not found';
-  } else {
-    // If it's not an array, it's a single entry rubric (e.g., 'NV')
-    return roundedPercentage >= correctRubric.min ? correctRubric.grade : 'Grade not found';
+  // If the calculated percentage for the next grade is not valid, we need to check the next status level
+  if (percentForNextGrade <= 0 || nextGrade === 'A+') {
+    // Here, you need to define the logic to handle the transition to the next status
+    // For example, if status is 'PR' and next grade is 'A+', you would need to calculate up to 71% of 'AD'
+    if (status === 'PR' && nextGrade === 'A+') {
+      percentForNextGrade = 71 - percentage;
+    }
+    // Add similar conditions for other transitions that are not straightforward
   }
+
+  return { currentGrade, nextGrade, percentForNextGrade };
 }
+
 
 // Function to process the tooltip and calculate the letter grade
 function processTooltip(tooltip) {
-  const tooltipText = tooltip.textContent.trim();
+  const tooltipText = tooltip.textContent.trim().split(' - ')[0]; 
 
   const gradeRegex = /^(\d+\.?\d*)% of the way to achieving (AD|PR|EM|NV)$/;
   const match = tooltipText.match(gradeRegex);
 
+  const levelMapping = {
+    'AD': 'PR',
+    'PR': 'EM',
+    'EM': 'NV',
+    'NV': 'NV' // Assuming 'NV' is the lowest level, so it remains the same
+  };
+  
   if (match) {
     const percentage = parseFloat(match[1]);
-    const level = match[2];
-    const letterGrade = getLetterGrade(percentage, level);
-    if (letterGrade && letterGrade !== 'Grade not found') {
-      // Append the letter grade to the tooltip text
-      tooltip.textContent = `${tooltipText} - ${letterGrade} Letter Grade`;
-      // Send the letter grade to the background script
-      chrome.runtime.sendMessage({ letterGrade: letterGrade });
+    let level = match[2];
+    
+    // Lower the level only if the percentage is less than 100 and the level is not 'AD' with a percentage above the minimum for 'AD'
+    if (percentage < 100 && !(level === 'AD' && percentage >= gradingRubric['AD'][0].min_percent)) {
+      level = levelMapping[level] || level; // If the level is not found in the mapping, keep it the same
+    }
+  
+    const roundedPercentage = Math.round(percentage);
+    const { currentGrade, nextGrade, percentForNextGrade } = determineLetterGradeAndNext(level, roundedPercentage);
+
+    if (currentGrade) {
+      const nextGradeInfo = nextGrade !== 'Max' ? `<br><b>${percentForNextGrade}%</b> more to a ${nextGrade}` : '';
+      tooltip.innerHTML = `${tooltipText}<br>Letter Grade: <b>${currentGrade}</b>${nextGradeInfo}`;
     } else {
+     
     }
   } else {
+    
   }
 }
 
