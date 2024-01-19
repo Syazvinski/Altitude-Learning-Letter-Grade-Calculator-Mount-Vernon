@@ -1,9 +1,9 @@
-console.log('Grade calculation script is injected and running!');
+// Grade Calculation Script
 
-// Selector for the tooltip content
+// Selector for the tooltip content where grades will be displayed
 const tooltipGutsSelector = '.AsTooltip-guts.js-AsTooltip-guts';
 
-// Grading rubric
+// Grading rubric defining grade ranges for different statuses
 const gradingRubric = {
   'AD': [
     { min_percent: 71, max_percent: 100, letter_grade: 'A+', next_grade: 'Max' },
@@ -23,96 +23,95 @@ const gradingRubric = {
   ]
 };
 
-// Determines the letter grade and the percentage needed for the next grade
+/**
+ * Determines the letter grade and the percentage needed for the next grade.
+ * @param {string} status - The current status.
+ * @param {number} percentage - The current percentage.
+ * @returns An object containing current grade, next grade, and percent for next grade.
+ */
 function determineLetterGradeAndNext(status, percentage) {
-  let currentGrade = undefined;
-  let nextGrade = undefined;
-  let percentForNextGrade = 0;
+  let currentGrade, nextGrade, percentForNextGrade = 0;
 
   if (status in gradingRubric) {
-    for (let gradeInfo of gradingRubric[status]) {
+    gradingRubric[status].some(gradeInfo => {
       if (gradeInfo.min_percent <= percentage && percentage <= gradeInfo.max_percent) {
         currentGrade = gradeInfo.letter_grade;
         nextGrade = gradeInfo.next_grade;
         if (nextGrade !== 'Max') {
-          // If the next grade is within the current status, calculate the difference to its minimum percent
           percentForNextGrade = gradeInfo.max_percent + 1 - percentage;
         }
-        break;
+        return true; // Break the loop
       }
-    }
+      return false; // Continue the loop
+    });
   } else {
     throw new Error("Invalid status code");
   }
 
-  // If the calculated percentage for the next grade is not valid, we need to check the next status level
+  // Logic for transitioning to the next status
   if (percentForNextGrade <= 0 || nextGrade === 'A+') {
-    // Here, you need to define the logic to handle the transition to the next status
-    // For example, if status is 'PR' and next grade is 'A+', you would need to calculate up to 71% of 'AD'
+    // Example: transitioning from 'PR' to 'AD'
     if (status === 'PR' && nextGrade === 'A+') {
       percentForNextGrade = 71 - percentage;
     }
-    // Add similar conditions for other transitions that are not straightforward
+    // Add additional conditions for other status transitions as needed
   }
 
   return { currentGrade, nextGrade, percentForNextGrade };
 }
 
-
-// Function to process the tooltip and calculate the letter grade
+/**
+ * Processes a tooltip element to calculate and display the letter grade.
+ * @param {Element} tooltip - The tooltip DOM element.
+ */
 function processTooltip(tooltip) {
   const tooltipText = tooltip.textContent.trim().split(' - ')[0]; 
-
   const gradeRegex = /^(\d+\.?\d*)% of the way to achieving (AD|PR|EM|NV)$/;
-  const match = tooltipText.match(gradeRegex);
 
   const levelMapping = {
     'AD': 'PR',
     'PR': 'EM',
     'EM': 'NV',
-    'NV': 'NV' // Assuming 'NV' is the lowest level, so it remains the same
+    'NV': 'NV' // Assuming 'NV' is the lowest level
   };
-  
+
+  const match = tooltipText.match(gradeRegex);
   if (match) {
-    const percentage = parseFloat(match[1]);
-    let level = match[2];
-    
-    // Lower the level only if the percentage is less than 100 and the level is not 'AD' with a percentage above the minimum for 'AD'
+    let [_, percentageStr, level] = match;
+    const percentage = parseFloat(percentageStr);
+
     if (percentage < 100 && !(level === 'AD' && percentage >= gradingRubric['AD'][0].min_percent)) {
-      level = levelMapping[level] || level; // If the level is not found in the mapping, keep it the same
+      level = levelMapping[level] || level;
     }
-  
+
     const roundedPercentage = Math.round(percentage);
     const { currentGrade, nextGrade, percentForNextGrade } = determineLetterGradeAndNext(level, roundedPercentage);
 
-    if (currentGrade) {
-      const nextGradeInfo = nextGrade !== 'Max' ? `<br><b>${percentForNextGrade}%</b> more to a ${nextGrade}` : '';
-      tooltip.innerHTML = `${tooltipText}<br>Letter Grade: <b>${currentGrade}</b>${nextGradeInfo}`;
-    } else {
-     
-    }
-  } else {
-    
+    const nextGradeInfo = nextGrade !== 'Max' ? `<br><b>${percentForNextGrade}%</b> more to a ${nextGrade}` : '';
+    tooltip.innerHTML = `${tooltipText}<br>Letter Grade: <b>${currentGrade}</b>${nextGradeInfo}`;
   }
 }
 
-// Options for the observer (which mutations to observe)
+// Configuration for the observer (which mutations to observe)
 const observerOptions = {
   childList: true,
   subtree: true
 };
 
-// Callback function to execute when mutations are observed
+/**
+ * Callback function to execute when mutations are observed.
+ * This function will process any added tooltip nodes.
+ */
 const observerCallback = function(mutationsList, observer) {
-  for (let mutation of mutationsList) {
+  mutationsList.forEach(mutation => {
     if (mutation.addedNodes) {
-      mutation.addedNodes.forEach((node) => {
+      mutation.addedNodes.forEach(node => {
         if (node.matches && node.matches(tooltipGutsSelector)) {
           processTooltip(node);
         }
       });
     }
-  }
+  });
 };
 
 // Create an observer instance linked to the callback function
